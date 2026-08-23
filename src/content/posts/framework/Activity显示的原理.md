@@ -1,0 +1,43 @@
+---
+title: "Activity显示的原理"
+published: 2022-11-06
+description: "Activity显示的原理"
+tags: ["Android","Framework"]
+category: "framework"
+draft: false
+slug: "framework-001"
+---
+
+
+# Activity显示的原理
+
+- setContentView的原理是什么？
+- Activity在onResume之后才会显示出来的原因是什么？
+
+
+
+我们一般在显示一个Activity界面的时候，会在Activity的onCreate函数中通过setContentView方法，将一个布局文件传递进去，然后就等待UI界面的显示，那么setContentView中到底做了什么操作呢？
+![image.png](https://mmbiz.qpic.cn/mmbiz_png/LrDMVD5bqLXusNIRWG3ibmRaWunjvaVrI0iaujGJkVvNDSJ7qtcKdSQPfpKl0e7aGQuib70Atwkj5Bw6vHtvqpY5A/640?wx_fmt=png&from=appmsg)
+上面是setContentView的过程，会将布局文件的ID传递给mContentParent进行布局的加载，而在加载布局之前要保证mContentParent不为空，否则就要首先installDecor。在installDecor的过程中，会首先初始化一个DecorView，这个是手机整个页面的RootView，然后创建一个系统布局in，并将该布局加到DecorView中，最后通过findViewById找到布局中的mContentParent。
+
+**那么setContentView的作用**
+创建好DecorView，初始化整个页面的系统布局，然后将Activity的布局文件加载到mContentParent中。
+
+上面setContentView是建立好了整个ViewTree的数据结果，但并没有将界面UI真正的绘制到屏幕上。
+![image.png](https://mmbiz.qpic.cn/mmbiz_png/LrDMVD5bqLXusNIRWG3ibmRaWunjvaVrIO0kLEn1FMPucNfAAggd4XUKjiaiaHpxY2HIQGjX1rqBhZFFQPv1sDoHg/640?wx_fmt=png&from=appmsg)
+handleResumeActivity函数，该函数是Activity的onResume生命周期函数调用的。
+
+我们知道整个页面UI的显示，是在onResume这个生命周期函数之后显示的，而上面的setContentView是在Activity的onCreate生命周期中进行的，在onCreate的时候就已经生成好了整个页面绘制的ViewTree数据，那么在onResume中做了什么事情，才是的ViewTree数据被真正显示在屏幕上的呢？
+
+在handleResumeActivity中有两步，首先是获得当前window的DecorView，并将DecorView添加到了WindowManager中，最后是调用makeVisible是的整个UI界面可见。其中重要的是DecorView以及WindowManager的交互部分。
+![image.png](https://mmbiz.qpic.cn/mmbiz_png/LrDMVD5bqLXusNIRWG3ibmRaWunjvaVrIC8blHtu3fSIKng7HgO5KnN518z9Ilo5Q7wOL520j7v1Eibas8oSaXew/640?wx_fmt=png&from=appmsg)
+Activity在创建的时候会创建一个PhoneWindow，这个PhoneWindow里面有一个DecorView，这个DecorView是整个Activity的ViewTree显示的RootView。Activity的setContentView中的UI是DecorView中的一部分ContentView。
+
+DecorView会对应一个ViewRootImpl对象，这个ViewRootImpl可以通过IWindowSession向WMS发起Binder调用，而WMS也可以通过IWindow向应用端发起Binder调用。
+
+Activity中的UI界面能够显示，主要是依托于DecorView创建的ViewRootImpl对象，ViewRootImpl对象全权负责DecorView的绘制和显示。
+
+ViewRootImpl会在WMS中为每个Activity注册一个窗口，WMS就是通过管理这些窗口的位置和大小布局来管理整个手机界面上UI的显示的。
+
+除此之外，ViewRootImpl还会在WMS中申请一个Surface，通过Surface进行界面数据的生成，界面数据生成之后，就可以将其写入到屏幕的缓存区，等待屏幕在vsync信号中显示在手机界面上。
+

@@ -1,0 +1,139 @@
+---
+import { Icon } from "astro-icon/components";
+import { profileConfig } from "../../config";
+import { url } from "../../utils/url-utils";
+import ImageWrapper from "../misc/ImageWrapper.astro";
+import path from "node:path";
+import type { ImageMetadata } from "astro";
+
+const config = profileConfig;
+
+// 预先解析所有图片路径（用于弹窗显示）
+const resolvedLinks = await Promise.all(
+	config.links.map(async (item) => {
+		if (!item.image) return { ...item, resolvedImage: undefined };
+
+		const isLocal = !(
+			item.image.startsWith("/") ||
+			item.image.startsWith("http") ||
+			item.image.startsWith("https")
+		);
+
+		if (isLocal) {
+			// 动态导入本地图片
+			const files = import.meta.glob<ImageMetadata>("../../**", {
+				import: "default",
+			});
+			let normalizedPath = path
+				.normalize(path.join("../../", item.image))
+				.replace(/\\/g, "/");
+			const file = files[normalizedPath];
+			if (file) {
+				const img = await file();
+				return { ...item, resolvedImage: img.src };
+			} else {
+				console.error(`[ERROR] Image not found: ${item.image}`);
+				return { ...item, resolvedImage: undefined };
+			}
+		} else {
+			// 公共目录或外部链接
+			return { ...item, resolvedImage: item.image.startsWith("/") ? url(item.image) : item.image };
+		}
+	})
+);
+---
+<div class="card-base p-3">
+    <a aria-label="Go to About Page" href={url('/about/')}
+       class="group block relative mx-auto mt-1 lg:mx-0 lg:mt-0 mb-3
+       max-w-[12rem] lg:max-w-none overflow-hidden rounded-xl active:scale-95">
+        <div class="absolute transition pointer-events-none group-hover:bg-black/30 group-active:bg-black/50
+        w-full h-full z-50 flex items-center justify-center">
+            <Icon name="fa6-regular:address-card"
+                  class="transition opacity-0 scale-90 group-hover:scale-100 group-hover:opacity-100 text-white text-5xl">
+            </Icon>
+        </div>
+        <ImageWrapper src={config.avatar || ""} alt="Profile Image of the Author" class="mx-auto lg:w-full h-full lg:mt-0 "></ImageWrapper>
+    </a>
+    <div class="px-2">
+        <div class="font-bold text-xl text-center mb-1 dark:text-neutral-50 transition">{config.name}</div>
+        <div class="h-1 w-5 bg-[var(--primary)] mx-auto rounded-full mb-2 transition"></div>
+        <div class="text-center text-neutral-400 mb-2.5 transition">{config.bio}</div>
+        <div class="flex flex-wrap gap-2 justify-center mb-1">
+            {resolvedLinks.length > 1 && resolvedLinks.map(item =>
+                    <a rel="me" aria-label={item.name}
+                       href={item.resolvedImage ? '#' : item.url}
+                       target={item.resolvedImage ? undefined : "_blank"}
+                       data-image={item.resolvedImage}
+                       class="btn-regular rounded-lg h-10 w-10 active:scale-90 social-link">
+                        <Icon name={item.icon} class="text-[1.5rem]"></Icon>
+                    </a>
+            )}
+            {resolvedLinks.length == 1 && <a rel="me" aria-label={resolvedLinks[0].name}
+                                            href={resolvedLinks[0].resolvedImage ? '#' : resolvedLinks[0].url}
+                                            target={resolvedLinks[0].resolvedImage ? undefined : "_blank"}
+                                            data-image={resolvedLinks[0].resolvedImage}
+                                            class="btn-regular rounded-lg h-10 gap-2 px-3 font-bold active:scale-95 social-link">
+                <Icon name={resolvedLinks[0].icon} class="text-[1.5rem]"></Icon>
+                {resolvedLinks[0].name}
+            </a>}
+        </div>
+    </div>
+</div>
+
+<script>
+import PhotoSwipe from "photoswipe";
+import "photoswipe/style.css";
+
+function setupSocialLinkImagePopup() {
+	const socialLinks = document.querySelectorAll<HTMLAnchorElement>(".social-link[data-image]");
+
+	socialLinks.forEach(link => {
+		link.addEventListener("click", async (e) => {
+			e.preventDefault();
+
+			const imageSrc = link.dataset.image;
+			if (!imageSrc) return;
+
+			// 预加载图片以获取尺寸
+			const img = new Image();
+			img.src = imageSrc;
+
+			await img.decode().catch(() => {});
+
+			const items = [{
+				src: imageSrc,
+				width: img.naturalWidth || 800,
+				height: img.naturalHeight || 800,
+				alt: link.getAttribute("aria-label") || "Image"
+			}];
+
+			// 创建 PhotoSwipe 实例
+			const pswp = new PhotoSwipe({
+				dataSource: items,
+				index: 0,
+				closeSVG: '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#ffffff"><path d="M480-424 284-228q-11 11-28 11t-28-11q-11-11-11-28t11-28l196-196-196-196q-11-11-11-28t11-28q11-11 28-11t28 11l196 196 196-196q11-11 28-11t28 11q11 11 11 28t-11 28L536-480l196 196q11 11 11 28t-11 28q-11 11-28 11t-28-11L480-424Z"/></svg>',
+				zoomSVG: '<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#ffffff"><path d="M340-540h-40q-17 0-28.5-11.5T260-580q0-17 11.5-28.5T300-620h40v-40q0-17 11.5-28.5T380-700q17 0 28.5 11.5T420-660v40h40q17 0 28.5 11.5T500-580q0 17-11.5 28.5T460-540h-40v40q0 17-11.5 28.5T380-460q-17 0-28.5-11.5T340-500v-40Zm40 220q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l224 224q11 11 11 28t-11 28q-11 11-28 11t-28-11L532-372q-30 24-69 38t-83 14Zm0-80q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>',
+				padding: { top: 20, bottom: 20, left: 20, right: 20 },
+				wheelToZoom: true,
+				arrowPrev: false,
+				arrowNext: false,
+				imageClickAction: 'close',
+				tapAction: 'close',
+				doubleTapAction: 'zoom',
+			});
+
+			pswp.init();
+		});
+	});
+}
+
+// 初始化
+setupSocialLinkImagePopup();
+
+// 支持页面切换（Swup）
+if (window.swup) {
+	window.swup.hooks.on("page:view", () => {
+		setupSocialLinkImagePopup();
+	});
+}
+</script>
